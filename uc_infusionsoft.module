@@ -22,12 +22,16 @@ function uc_infusionsoft_order($op, &$order, $arg2) {
   if($op == 'save' && $order->order_status == 'in_checkout') {
     // Create or update the Infusionsoft contact
     $i_contact_id = uc_infusionsoft_update_contact($order);
+    i_dpm($i_contact_id, 'uc_infusionsoft_update_contact');
     
     // Tag the new or updated Infusionsoft Contact
     $result = uc_infusionsoft_tag_contact($i_contact_id);
-     
+    i_dpm($result, 'uc_infusionsoft_tag_contact');
+    
+    // Create the linked Infusionsoft Order and Product Line Items 
     if(is_numeric($i_contact_id) && $i_contact_id > 0) {
-      $result = uc_infusionsoft_update_order($i_contact_id, $order);
+      $result = uc_infusionsoft_create_order($i_contact_id, $order);
+      i_dpm($result, 'uc_infusionsoft_create_order');
     }
   }
 }
@@ -57,7 +61,6 @@ function uc_infusionsoft_update_contact($order) {
   );
  
   $i_contact_id = infusionsoft_update_contact($contact);
-  i_dpm('Infusionsoft contact id is: ' . $i_contact_id);
   return $i_contact_id;
 }
 
@@ -69,24 +72,29 @@ function uc_infusionsoft_tag_contact($i_contact_id) {
   // Apply the NET Student tag
   if(is_numeric($i_contact_id) && $i_contact_id > 0) {
     $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, TAG_NET_STUDENT);
-    i_dpm('Result of adding tag is: ' . $result);
   }
   return $result;
 }
 
 /** 
-  * Place an Infusionsoft Order 
+  * Places an Infusionsoft Order 
   * based on the details of the Ubercart order.
   */
-function uc_infusionsoft_update_order($i_contact_id, $order) {
+function uc_infusionsoft_create_order($i_contact_id, $order) {
+  // Preliminary variable setup.
   $result = NULL;
+  $order_name = 'NET Order #' . $order->order_id;
+  $dt_obj = uc_infusionsoft_get_datetime(); // Date order placed (in XML-RPC format)
   
-  $dt_obj = uc_infusionsoft_get_datetime();
-      
+  // Check to see if there are duplicates
+  $i_orders = infusionsoft_findbyfield_all('Job', 'JobTitle', $order_name, array('Id'))
+  if(isset($i_orders[0]['Id'])) {
+    $result = array('message' => 'Found existing order', 'i_order_id' => $i_orders[0]['Id']);
+  }
+  
   // Create the basic order
   $i_order_id = infusionsoft_send_request('InvoiceService.createBlankOrder', (int) $i_contact_id, 
-    'NET Order #' . $order->order_id, $dt_obj, AFFILIATE_NONE, AFFILIATE_NONE);
-  i_dpm('Infusionsoft Order id is: ' . $i_order_id);
+    $order_name, $dt_obj, AFFILIATE_NONE, AFFILIATE_NONE);
   $result = array('i_order_id' => $i_order_id); 
   // Attach the products to the order
   if(is_numeric($i_order_id) && $i_order_id > 0) {
@@ -103,7 +111,6 @@ function uc_infusionsoft_update_order($i_contact_id, $order) {
         if($product_result == TRUE) {
           $result['i_product_id'][] = $i_product_id;
         }
-        i_dpm('Result of addOrderItem for ' . $product->title . ' is: ' . $result);
       }
     }
   }
