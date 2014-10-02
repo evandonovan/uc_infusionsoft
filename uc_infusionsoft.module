@@ -88,8 +88,10 @@ function uc_infusionsoft_create_order($i_contact_id, $order) {
   
   // Check to see if there are duplicates
   $i_orders = infusionsoft_findbyfield_all('Job', 'JobTitle', $order_name, array('Id'));
+  
   if(isset($i_orders[0]['Id'])) {
     $result = array('message' => 'Found existing order', 'i_order_id' => $i_orders[0]['Id']);
+    return $result;
   }
   
   // Create the basic order
