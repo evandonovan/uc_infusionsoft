@@ -32,7 +32,10 @@ function uc_infusionsoft_order($op, &$order, $arg2) {
   }
 }
 
-/* Push the contact to Infusionsoft from the Ubercart order */
+/**
+ * Pushes the contact to Infusionsoft
+ * from the Ubercart order.
+ */
 function uc_infusionsoft_update_contact($order) {
   // Get the email from the extra email address field
   // or else from the primary email
@@ -58,7 +61,9 @@ function uc_infusionsoft_update_contact($order) {
   return $i_contact_id;
 }
 
-/* Tag the new or updated Infusionsoft Contact */
+/**
+* Tags the new or updated Infusionsoft Contact 
+*/
 function uc_infusionsoft_tag_contact($i_contact_id) {
   $result = FALSE;
   // Apply the NET Student tag
@@ -154,6 +159,7 @@ function uc_infusionsoft_get_datetime($time = NULL) {
   $dt_obj->is_date = TRUE;
 }
 
+// Wrapper function for dpm so code will work if Devel is disabled
 function i_dpm($data, $label = NULL, $type = 'status') {
   if(function_exists('dpm') && DEBUG_MODE == TRUE) {
     dpm($data, $label, $type);
