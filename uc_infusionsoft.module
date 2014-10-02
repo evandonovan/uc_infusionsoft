@@ -25,7 +25,7 @@ function uc_infusionsoft_order($op, &$order, $arg2) {
     i_dpm($i_contact_id, 'uc_infusionsoft_update_contact');
     
     // Tag the new or updated Infusionsoft Contact
-    $result = uc_infusionsoft_tag_contact($i_contact_id);
+    $result = uc_infusionsoft_tag_contact($i_contact_id, TAG_NET_STUDENT);
     i_dpm($result, 'uc_infusionsoft_tag_contact');
     
     // Create the linked Infusionsoft Order and Product Line Items 
@@ -67,11 +67,11 @@ function uc_infusionsoft_update_contact($order) {
 /**
 * Tags the new or updated Infusionsoft Contact 
 */
-function uc_infusionsoft_tag_contact($i_contact_id) {
+function uc_infusionsoft_tag_contact($i_contact_id, $i_tag_id) {
   $result = FALSE;
-  // Apply the NET Student tag
+  // Apply the tag
   if(is_numeric($i_contact_id) && $i_contact_id > 0) {
-    $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, TAG_NET_STUDENT);
+    $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, (int) $i_tag_id;
   }
   return $result;
 }
