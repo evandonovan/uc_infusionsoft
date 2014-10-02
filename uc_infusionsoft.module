@@ -73,7 +73,7 @@ function uc_infusionsoft_tag_contact($i_contact_id) {
   * Place an Infusionsoft Order 
   * based on the details of the Ubercart order.
   */
-function uc_infusionsoft_update_order($i_contact_id, $order)
+function uc_infusionsoft_update_order($i_contact_id, $order) {
   $result = NULL;
   
   $dt_obj = uc_infusionsoft_get_datetime();
