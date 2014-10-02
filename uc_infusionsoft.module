@@ -17,90 +17,92 @@ define('TYPE_PRODUCT', 4);
  * Pushes users to Infusionsoft when they make an Ubercart purchase.
  */
 function uc_infusionsoft_order($op, &$order, $arg2) {
-  global $user;
+  // Only do this action on the initial checkout.
+  // @todo: Figure out why it wouldn't work on order_status == 'completed'
   if($op == 'save' && $order->order_status == 'in_checkout') {
-    // i_dpm($order);
-    // i_dpm($user);
-    // Get the email from the extra email address field
-    // or else from the primary email
-    $mail = (isset($order->extra_fields['ucxf_email_address_billing'])) ? 
-      $order->extra_fields['ucxf_email_address_billing'] : $order->primary_email;
+    // Create or update the Infusionsoft contact
+    $i_contact_id = uc_infusionsoft_update_contact($order);
     
-    /* Push the contact to Infusionsoft from the Ubercart order */
+    // Tag the new or updated Infusionsoft Contact
+    $result = uc_infusionsoft_tag_contact($i_contact_id);
+     
+    if(is_numeric($i_contact_id) && $i_contact_id > 0) {
+      $result = uc_infusionsoft_update_order($i_contact_id, $order);
+    }
+  }
+}
 
-    $contact = array(
-      'FirstName' => $order->billing_first_name,
-      'LastName' => $order->billing_last_name,
-      'Email' => $mail,
-      'StreetAddress1' => $order->billing_street1,
-      'City' => $order->billing_city,
-      'PostalCode' => $order->billing_postal_code,
-      'State' => uc_infusionsoft_export_zone($order, 'billing_zone'),
-      'Country' => uc_infusionsoft_export_country($order, 'billing_country'),
-      'Phone1' => $order->billing_phone,
-      'ContactType' => 'Customer',
-      'Leadsource' => 'NET Site Purchase'
-    );
+/* Push the contact to Infusionsoft from the Ubercart order */
+function uc_infusionsoft_update_contact($order) {
+  // Get the email from the extra email address field
+  // or else from the primary email
+  $mail = (isset($order->extra_fields['ucxf_email_address_billing'])) ? 
+    $order->extra_fields['ucxf_email_address_billing'] : $order->primary_email;
+
+  $contact = array(
+    'FirstName' => $order->billing_first_name,
+    'LastName' => $order->billing_last_name,
+    'Email' => $mail,
+    'StreetAddress1' => $order->billing_street1,
+    'City' => $order->billing_city,
+    'PostalCode' => $order->billing_postal_code,
+    'State' => uc_infusionsoft_export_zone($order, 'billing_zone'),
+    'Country' => uc_infusionsoft_export_country($order, 'billing_country'),
+    'Phone1' => $order->billing_phone,
+    'ContactType' => 'Customer',
+    'Leadsource' => 'NET Site Purchase'
+  );
  
-    $contact_id = infusionsoft_update_contact($contact);
-    i_dpm('Infusionsoft contact id is: ' . $contact_id);    
+  $i_contact_id = infusionsoft_update_contact($contact);
+  i_dpm('Infusionsoft contact id is: ' . $contact_id);
+  return $i_contact_id;
+}
 
-    /* Tag the new or updated Infusionsoft Contact */
-    
-    // Apply the NET Student tag
-    if(is_numeric($contact_id) && $contact_id > 0) {
-      $result = infusionsoft_send_request('ContactService.addToGroup', (int) $contact_id, TAG_NET_STUDENT);
-      i_dpm('Result of adding tag is: ' . $result);
+/* Tag the new or updated Infusionsoft Contact */
+function uc_infusionsoft_tag_contact($i_contact_id) {
+  $result = FALSE;
+  // Apply the NET Student tag
+  if(is_numeric($i_contact_id) && $i_contact_id > 0) {
+    $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, TAG_NET_STUDENT);
+    i_dpm('Result of adding tag is: ' . $result);
+  }
+  return $result;
+}
 
-      /** 
-        * Place an Infusionsoft Order 
-        * based on the details of the Ubercart order.
-        */
-
-      // Create the timestamp object in the quirky format XML-RPC needs
-      $dt_obj = getdate();
-      $dt_obj['month'] = $dt_obj['mon'];
-      if($dt_obj['month'] <= 9) {
-        $dt_obj['month'] = '0' . (string) $dt_obj['month'];
-      }
-      $dt_obj['day'] = $dt_obj['mday'];
-      if($dt_obj['day'] <= 9) {
-        $dt_obj['day'] = '0' . (string) $dt_obj['day'];
-      }
-      $dt_obj['hour'] = $dt_obj['hours'];
-      if($dt_obj['hour'] <= 9) {
-        $dt_obj['hour'] = '0' . (string) $dt_obj['hour'];
-      }
-      $dt_obj['minute'] = $dt_obj['minutes'];
-      if($dt_obj['minute'] <= 9) {
-        $dt_obj['minute'] = '0' . (string) $dt_obj['minute'];
-      }
-      $dt_obj['second'] = $dt_obj['seconds'];
-      if($dt_obj['second'] <= 9) {
-        $dt_obj['second'] = '0' . (string) $dt_obj['second'];
-      }
-      $dt_obj = (object) $dt_obj;
-      $dt_obj->is_date = TRUE;
-      // Create the basic order
-      $i_order_id = infusionsoft_send_request('InvoiceService.createBlankOrder', (int) $contact_id, 'NET Order #' . $order->order_id, $dt_obj, AFFILIATE_NONE, AFFILIATE_NONE);
-      i_dpm('Infusionsoft Order id is: ' . $i_order_id);
-   
-      // Attach the products to the order
-      if(is_numeric($i_order_id) && $i_order_id > 0) {
-        foreach($order->products as $product) {
-          // Load the product id in Infusionsoft
-          $i_products = infusionsoft_findbyfield_all('Product', 'Sku', $product->model, array('Id'));
-          
-          // Attach the product to the order if found
-          if(isset($i_products[0]['Id']) && is_numeric($i_products[0]['Id'])) {
-            $i_product_id = $i_products[0]['Id'];
-            $result = infusionsoft_send_request('InvoiceService.addOrderItem', (int) $i_order_id, (int) $i_product_id, TYPE_PRODUCT, (double) $product->price, (int) $product->qty, $product->title, $product->title);
-            i_dpm('Result of addOrderItem for ' . $product->title . ' is: ' . $result);
-          }
+/** 
+  * Place an Infusionsoft Order 
+  * based on the details of the Ubercart order.
+  */
+function uc_infusionsoft_update_order($i_contact_id, $order)
+  $result = NULL;
+  
+  $dt_obj = uc_infusionsoft_get_datetime();
+      
+  // Create the basic order
+  $i_order_id = infusionsoft_send_request('InvoiceService.createBlankOrder', (int) $i_contact_id, 
+    'NET Order #' . $order->order_id, $dt_obj, AFFILIATE_NONE, AFFILIATE_NONE);
+  i_dpm('Infusionsoft Order id is: ' . $i_order_id);
+  $result = array('i_order_id' => $i_order_id); 
+  // Attach the products to the order
+  if(is_numeric($i_order_id) && $i_order_id > 0) {
+    foreach($order->products as $product) {
+      // Load the product id in Infusionsoft
+      $i_products = infusionsoft_findbyfield_all('Product', 'Sku', $product->model, array('Id'));
+  
+      // Attach the product to the order if found
+      if(isset($i_products[0]['Id']) && is_numeric($i_products[0]['Id'])) {
+        $i_product_id = $i_products[0]['Id'];
+        $product_result = infusionsoft_send_request('InvoiceService.addOrderItem', (int) $i_order_id, 
+          (int) $i_product_id, TYPE_PRODUCT, (double) $product->price, 
+          (int) $product->qty, $product->title, $product->title);
+        if($product_result == TRUE) {
+          $result['i_product_id'][] = $i_product_id;
         }
+        i_dpm('Result of addOrderItem for ' . $product->title . ' is: ' . $result);
       }
     }
   }
+  return $result;
 }
 
 // Callback for exporting state, province, administrative zone code
@@ -119,6 +121,37 @@ function uc_infusionsoft_export_country($order, $fieldname) {
     $country = uc_country_get_by_id($order->$fieldname);
   }    
   return $country;
+}
+
+// Utility function: creates date object for XML-RPC
+// @todo: Make this more concise, less fragile?
+function uc_infusionsoft_get_datetime($time = NULL) {
+  if($time == NULL) {
+    $time = time();
+  }
+  $dt_obj = getdate(time());
+  $dt_obj['month'] = $dt_obj['mon'];
+  if($dt_obj['month'] <= 9) {
+    $dt_obj['month'] = '0' . (string) $dt_obj['month'];
+  }
+  $dt_obj['day'] = $dt_obj['mday'];
+  if($dt_obj['day'] <= 9) {
+    $dt_obj['day'] = '0' . (string) $dt_obj['day'];
+  }
+  $dt_obj['hour'] = $dt_obj['hours'];
+  if($dt_obj['hour'] <= 9) {
+    $dt_obj['hour'] = '0' . (string) $dt_obj['hour'];
+  }
+  $dt_obj['minute'] = $dt_obj['minutes'];
+  if($dt_obj['minute'] <= 9) {
+    $dt_obj['minute'] = '0' . (string) $dt_obj['minute'];
+  }
+  $dt_obj['second'] = $dt_obj['seconds'];
+  if($dt_obj['second'] <= 9) {
+    $dt_obj['second'] = '0' . (string) $dt_obj['second'];
+  }
+  $dt_obj = (object) $dt_obj;
+  $dt_obj->is_date = TRUE;
 }
 
 function i_dpm($data, $label = NULL, $type = 'status') {
