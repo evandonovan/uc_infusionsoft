@@ -71,7 +71,7 @@ function uc_infusionsoft_tag_contact($i_contact_id, $i_tag_id) {
   $result = FALSE;
   // Apply the tag
   if(is_numeric($i_contact_id) && $i_contact_id > 0) {
-    $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, (int) $i_tag_id;
+    $result = infusionsoft_send_request('ContactService.addToGroup', (int) $i_contact_id, (int) $i_tag_id);
   }
   return $result;
 }
