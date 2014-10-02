@@ -1,0 +1,128 @@
+<?php
+
+/* Whether this module is in debug mode. */
+define('DEBUG_MODE', TRUE);
+
+/* InfusionSoft tag for NET Student */
+define('TAG_NET_STUDENT', 279);
+
+/* Used in InvoiceService.createBlankOrder */
+define('AFFILIATE_NONE', 0);
+
+/* Used in InvoiceService.addOrderItem */
+define('TYPE_PRODUCT', 4);
+
+/**
+ * Implements hook_order().
+ * Pushes users to Infusionsoft when they make an Ubercart purchase.
+ */
+function uc_infusionsoft_order($op, &$order, $arg2) {
+  global $user;
+  if($op == 'save' && $order->order_status == 'in_checkout') {
+    // i_dpm($order);
+    // i_dpm($user);
+    // Get the email from the extra email address field
+    // or else from the primary email
+    $mail = (isset($order->extra_fields['ucxf_email_address_billing'])) ? 
+      $order->extra_fields['ucxf_email_address_billing'] : $order->primary_email;
+    
+    /* Push the contact to Infusionsoft from the Ubercart order */
+
+    $contact = array(
+      'FirstName' => $order->billing_first_name,
+      'LastName' => $order->billing_last_name,
+      'Email' => $mail,
+      'StreetAddress1' => $order->billing_street1,
+      'City' => $order->billing_city,
+      'PostalCode' => $order->billing_postal_code,
+      'State' => uc_infusionsoft_export_zone($order, 'billing_zone'),
+      'Country' => uc_infusionsoft_export_country($order, 'billing_country'),
+      'Phone1' => $order->billing_phone,
+      'ContactType' => 'Customer',
+      'Leadsource' => 'NET Site Purchase'
+    );
+ 
+    $contact_id = infusionsoft_update_contact($contact);
+    i_dpm('Infusionsoft contact id is: ' . $contact_id);    
+
+    /* Tag the new or updated Infusionsoft Contact */
+    
+    // Apply the NET Student tag
+    if(is_numeric($contact_id) && $contact_id > 0) {
+      $result = infusionsoft_send_request('ContactService.addToGroup', (int) $contact_id, TAG_NET_STUDENT);
+      i_dpm('Result of adding tag is: ' . $result);
+
+      /** 
+        * Place an Infusionsoft Order 
+        * based on the details of the Ubercart order.
+        */
+
+      // Create the timestamp object in the quirky format XML-RPC needs
+      $dt_obj = getdate();
+      $dt_obj['month'] = $dt_obj['mon'];
+      if($dt_obj['month'] <= 9) {
+        $dt_obj['month'] = '0' . (string) $dt_obj['month'];
+      }
+      $dt_obj['day'] = $dt_obj['mday'];
+      if($dt_obj['day'] <= 9) {
+        $dt_obj['day'] = '0' . (string) $dt_obj['day'];
+      }
+      $dt_obj['hour'] = $dt_obj['hours'];
+      if($dt_obj['hour'] <= 9) {
+        $dt_obj['hour'] = '0' . (string) $dt_obj['hour'];
+      }
+      $dt_obj['minute'] = $dt_obj['minutes'];
+      if($dt_obj['minute'] <= 9) {
+        $dt_obj['minute'] = '0' . (string) $dt_obj['minute'];
+      }
+      $dt_obj['second'] = $dt_obj['seconds'];
+      if($dt_obj['second'] <= 9) {
+        $dt_obj['second'] = '0' . (string) $dt_obj['second'];
+      }
+      $dt_obj = (object) $dt_obj;
+      $dt_obj->is_date = TRUE;
+      // Create the basic order
+      $i_order_id = infusionsoft_send_request('InvoiceService.createBlankOrder', (int) $contact_id, 'NET Order #' . $order->order_id, $dt_obj, AFFILIATE_NONE, AFFILIATE_NONE);
+      i_dpm('Infusionsoft Order id is: ' . $i_order_id);
+   
+      // Attach the products to the order
+      if(is_numeric($i_order_id) && $i_order_id > 0) {
+        foreach($order->products as $product) {
+          // Load the product id in Infusionsoft
+          $i_products = infusionsoft_findbyfield_all('Product', 'Sku', $product->model, array('Id'));
+          
+          // Attach the product to the order if found
+          if(isset($i_products[0]['Id']) && is_numeric($i_products[0]['Id'])) {
+            $i_product_id = $i_products[0]['Id'];
+            $result = infusionsoft_send_request('InvoiceService.addOrderItem', (int) $i_order_id, (int) $i_product_id, TYPE_PRODUCT, (double) $product->price, (int) $product->qty, $product->title, $product->title);
+            i_dpm('Result of addOrderItem for ' . $product->title . ' is: ' . $result);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Callback for exporting state, province, administrative zone code
+function uc_infusionsoft_export_zone($order, $fieldname) {
+  $zone = NULL;
+  if(($fieldname == 'billing_zone' || $fieldname == 'delivery_zone') && isset($order->$fieldname)) {
+    $zone = uc_zone_get_by_id($order->$fieldname); 
+  }
+  return $zone;
+}
+
+// Callback for exporting country name
+function uc_infusionsoft_export_country($order, $fieldname) {
+  $country = NULL;
+  if(($fieldname == 'billing_country' || $fieldname == 'delivery_country') && isset($order->$fieldname)) {
+    $country = uc_country_get_by_id($order->$fieldname);
+  }    
+  return $country;
+}
+
+function i_dpm($data, $label = NULL, $type = 'status') {
+  if(function_exists('dpm') && DEBUG_MODE == TRUE) {
+    dpm($data, $label, $type);
+  }
+}

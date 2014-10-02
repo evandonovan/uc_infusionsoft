@@ -1,0 +1,6 @@
+name = Ubercart/Infusionsoft Integration
+description = Integrates Infusionsoft with Ubercart
+dependencies[] = infusionsoft
+dependencies[] = uc_store
+package = Custom Modules
+core = 6.x
