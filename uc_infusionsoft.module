@@ -57,7 +57,7 @@ function uc_infusionsoft_update_contact($order) {
   );
  
   $i_contact_id = infusionsoft_update_contact($contact);
-  i_dpm('Infusionsoft contact id is: ' . $contact_id);
+  i_dpm('Infusionsoft contact id is: ' . $i_contact_id);
   return $i_contact_id;
 }
 
@@ -134,7 +134,7 @@ function uc_infusionsoft_get_datetime($time = NULL) {
   if($time == NULL) {
     $time = time();
   }
-  $dt_obj = getdate(time());
+  $dt_obj = getdate($time);
   $dt_obj['month'] = $dt_obj['mon'];
   if($dt_obj['month'] <= 9) {
     $dt_obj['month'] = '0' . (string) $dt_obj['month'];
@@ -157,6 +157,7 @@ function uc_infusionsoft_get_datetime($time = NULL) {
   }
   $dt_obj = (object) $dt_obj;
   $dt_obj->is_date = TRUE;
+  return $dt_obj;
 }
 
 // Wrapper function for dpm so code will work if Devel is disabled
